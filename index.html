@@ -1422,7 +1422,7 @@ const SEC={
   F('h_access','Home access notes','textarea',{full:1,show:{f:'s_where',in:['Home visit']},ph:'Stairs, key safe, pets, parking, best time to visit'}),
   F('s_reports','Reports requested','checks',{full:1,opts:['Initial assessment report','Progress report','Discharge summary','Functional capacity assessment','Assistive technology / equipment assessment','Home modification report']})]},
  attach:{title:'Attachments and consent',fields:[
-  F('a_file','Supporting documents (PDF or image, up to 20MB)','file',{full:1,hint:'Attach these to your email when you send the referral.'}),
+  F('a_file','Supporting documents (PDF or image, up to 10MB each)','file',{full:1,hint:'Attach up to 5 files (PDF, JPG, PNG, DOC, DOCX; up to 10MB each / 15MB total).'}),
   F('a_consent','The client (or their legal representative) has consented to this referral and to Rapha Allied Health collecting and sharing their health information with the referrer and treating team.','consent',{req:1,full:1}),
   F('a_notes','Anything else we should know?','textarea',{full:1})]}
 };
@@ -1572,15 +1572,15 @@ $('#refTypes').addEventListener('click',e=>{const b=e.target.closest('[data-ref]
 function setRefType(t){if(!REF[t])return;refType=t;try{localStorage.setItem('raphaRefType',t)}catch(e){}renderRefTabs();renderRefForm()}
 $('#refSide').addEventListener('click',e=>{const a=e.target.closest('[data-sec]');if(!a)return;e.preventDefault();document.getElementById('rsec'+a.dataset.sec).scrollIntoView({behavior:'smooth',block:'start'})});
 $('#refForm').addEventListener('input',()=>{applyShow();updateDots()});
-$('#refForm').addEventListener('change',e=>{applyShow();updateDots();if(e.target.type==='file'){const big=[...e.target.files].some(f=>f.size>20*1024*1024);const h=e.target.parentElement.querySelector('.hint');if(h){h.textContent=big?'One file is over 20MB. Please choose a smaller file.':'Attach these to your email when you send the referral.';h.className=big?'err':'hint'}}});
+$('#refForm').addEventListener('change',e=>{applyShow();updateDots();if(e.target.type==='file'){const big=[...e.target.files].some(f=>f.size>10*1024*1024);const h=e.target.parentElement.querySelector('.hint');if(h){h.textContent=big?'One file exceeds 10MB. Please choose a smaller file.':'Attach up to 5 files (PDF, JPG, PNG, DOC, DOCX; up to 10MB each / 15MB total).';h.className=big?'err':'hint'}}});
 $('#refForm').addEventListener('submit',e=>{
   e.preventDefault();let first=null;
   $$('#refForm .f').forEach(w=>{const ok=fieldOk(w);w.classList.toggle('bad',!ok);if(!ok&&!first)first=w});
   if(first){$('#refErr').textContent='Please complete the highlighted fields.';first.scrollIntoView({behavior:'smooth',block:'center'});const c=first.querySelector('input,select,textarea');if(c)setTimeout(()=>c.focus({preventScroll:true}),300);return}
   $('#refErr').textContent='';
-  const t=refSummary();const o=$('#refOut');o.hidden=false;
-  o.innerHTML=`<div class="summary stack"><h3>Review and send your ${REF[refType].short} referral</h3><div class="notice">Copy this referral and email it to <b>info@raphaalliedhealth.com</b>${$('#a_file')&&$('#a_file').files.length?', with your attachments':''}. Our intake team will contact the client to book the first appointment.</div><pre id="refText">${esc(t)}</pre><div class="row"><button class="btn" type="button" data-copy="1" data-copy-target="#refText">Copy referral</button><span class="copyline"><code>info@raphaalliedhealth.com</code><button class="btn small ghost" type="button" data-copy="info@raphaalliedhealth.com">Copy email</button></span></div></div>`;
-  o.scrollIntoView({behavior:'smooth',block:'start'});
+  const t=refSummary();const o=$('#refOut');
+  const files=[...$('#refForm').querySelectorAll('input[type="file"]')].flatMap(el=>[...el.files]);
+  raphaSubmit('referral',[val('c_first'),val('c_last')].filter(Boolean).join(' ')||'Referral',val('r_email')||val('c_email')||'',t,o,files);
 });
 let pendingRefSvc=null;
 renderRefTabs();renderRefForm();
@@ -2091,8 +2091,8 @@ function symBindForm(){
     $('#syErr').textContent='';
     const s=sym,[,title]=symUrgency(),m=symScore(),L=(arr,k)=>(arr.find(a=>a[0]===k)||[,'-'])[1];
     const t=`Subject: Symptom check – ${$('#sy_name').value} (${L(SYM.areas,s.area)})\n\nName: ${$('#sy_name').value}\nMobile: ${$('#sy_phone').value}\nEmail: ${$('#sy_email').value||'-'}\nSuburb: ${$('#sy_sub').value}\nPreferred: ${$('#sy_where').value}\nFunding: ${$('#sy_fund').value}\n\nArea: ${L(SYM.areas,s.area)}\nStarted: ${L(SYM.onset,s.onset)}\nDuration: ${L(SYM.dur,s.dur)}\nAge group: ${L(SYM.age,s.age)}\nPain now: ${s.pain}/10\nSymptoms: ${[...s.feats].map(k=>L(SYM.feats,k)).join(', ')||'-'}\nAffecting: ${[...s.impact].map(k=>L(SYM.impact,k)).join(', ')||'-'}\n\nSuggested next step: ${title}\nPossible matches (not a diagnosis): ${m.map(c=>c.name).join('; ')||'-'}\nConsent to contact: Yes`;
-    const o=$('#syOut');o.hidden=false;o.innerHTML=`<div class="summary stack"><b>Your results are ready to send.</b><div class="notice">Copy this message and email it to <b>info@raphaalliedhealth.com</b>. Our team will call you to book.</div><pre id="syText">${esc(t)}</pre><div class="row"><button class="btn small" type="button" data-copy="1" data-copy-target="#syText">Copy message</button><span class="copyline"><code>info@raphaalliedhealth.com</code><button class="btn small ghost" type="button" data-copy="info@raphaalliedhealth.com">Copy email</button></span></div></div>`;
-    o.scrollIntoView({behavior:'smooth',block:'center'});
+    const o=$('#syOut');
+    raphaSubmit('symptoms',$('#sy_name').value,$('#sy_email').value,t,o);
   });
 }
 function symValid(){
@@ -2130,9 +2130,8 @@ $('#bookForm').addEventListener('submit',e=>{
   if(!ok||!consent)return;
   const days=$$('#bkDays input:checked').map(i=>i.value).join(', ')||'Any';
   const t=`Subject: Appointment request – ${$('#bk_name').value} (${svc.value})\n\nService: ${svc.value}\nReason: ${$('#bk_reason').value||'-'}\nLocation: ${$('#bk_loc').value}\nPreferred days: ${days}\nPreferred time: ${($('input[name="bkTime"]:checked')||{}).value||'Any time'}\nFunding: ${$('#bk_fund').value}\n\nName: ${$('#bk_name').value}\nMobile: ${$('#bk_phone').value}\nEmail: ${$('#bk_email').value||'-'}\nSuburb: ${$('#bk_sub').value}\nInterpreter: ${$('#bk_interp').checked?($('#bk_lang').value||'Yes'):'No'}\nConsent to collect details: Yes`;
-  const o=$('#bkOut');o.hidden=false;
-  o.innerHTML=`<div class="summary stack"><h3>Your request is ready</h3><div class="notice">Copy this and email it to <b>info@raphaalliedhealth.com</b>. Our team will contact you to confirm a time.</div><pre id="bkText">${esc(t)}</pre><div class="row"><button class="btn" type="button" data-copy="1" data-copy-target="#bkText">Copy request</button><span class="copyline"><code>info@raphaalliedhealth.com</code><button class="btn small ghost" type="button" data-copy="info@raphaalliedhealth.com">Copy email</button></span></div></div>`;
-  o.scrollIntoView({behavior:'smooth',block:'start'});
+  const o=$('#bkOut');
+  raphaSubmit('booking',$('#bk_name').value,$('#bk_email').value,t,o);
 });
 
 $('#skipLink').addEventListener('click',e=>{e.preventDefault();$('#app').focus()});
@@ -2141,6 +2140,34 @@ function setSize(lg){document.documentElement.classList.toggle('text-lg',lg);$('
 $('#tsL').addEventListener('click',()=>setSize(true));$('#tsN').addEventListener('click',()=>setSize(false));
 try{if(localStorage.getItem('raphaText')==='lg')setSize(true)}catch(e){}
 
+
+/* Secure, server-side Microsoft 365 SMTP integration. No credentials in browser. */
+async function raphaSubmit(formType, name, email, summary, out, files=[]) {
+  const fd=new FormData();
+  fd.append('form_type',formType);fd.append('name',name);fd.append('email',email||'');fd.append('summary',summary);
+  fd.append('website','');
+  for(const file of files)fd.append('attachments[]',file,file.name);
+  const holder=typeof out==='string'?$(out):out;
+  const form=holder.closest('form')||(formType==='referral'?$('#refForm'):formType==='booking'?$('#bookForm'):formType==='symptoms'?$('#symForm'):$('#contactForm'));
+  const btn=form?.querySelector('button[type="submit"]');
+  if(btn){btn.disabled=true;btn.dataset.oldText=btn.textContent;btn.textContent='Sending...';}
+  holder.hidden=false;holder.textContent='Sending your request securely...';
+  try {
+    const res=await fetch('/api/submit.php',{method:'POST',body:fd,credentials:'same-origin',headers:{'Accept':'application/json'}});
+    const result=await res.json();
+    if(!res.ok||!result.ok)throw new Error(result.message||'Submission failed');
+    holder.textContent='Thank you. Your request has been submitted to Rapha Allied Health.';
+    holder.setAttribute('role','status');
+    // Do not repeat a potentially sensitive submission when visitor clicks again.
+    if(btn)btn.textContent='Submitted';
+  } catch(err) {
+    holder.textContent='Could not send your request: '+(err.message||'Please try again.');
+    holder.setAttribute('role','alert');
+    if(btn){btn.disabled=false;btn.textContent=btn.dataset.oldText||'Submit';}
+  }
+  holder.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
 /* Contact form */
 $('#ct_msg').addEventListener('input',e=>$('#ctCount').textContent=e.target.value.length);
 $('#contactForm').addEventListener('submit',e=>{
@@ -2148,7 +2175,8 @@ $('#contactForm').addEventListener('submit',e=>{
   $('#ctErr').textContent=ok?'':'Please add your name and a valid email.';
   if(!ok)return;
   const t=`Subject: ${$('#ct_topic').value} – ${$('#ct_name').value}\n\nFrom: ${$('#ct_name').value} <${$('#ct_email').value}>\n\n${$('#ct_msg').value}`;
-  const o=$('#ctOut');o.hidden=false;o.innerHTML=`<div class="summary stack"><b>Your message is ready.</b><p>Copy it and email it to info@raphaalliedhealth.com.</p><pre id="ctText">${esc(t)}</pre><button class="btn small" type="button" data-copy="1" data-copy-target="#ctText">Copy message</button></div>`;
+  const o=$('#ctOut');
+  raphaSubmit('contact',$('#ct_name').value,$('#ct_email').value,t,o);
 });
 
 $('#yr').textContent=new Date().getFullYear();
